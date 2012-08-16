@@ -1990,6 +1990,8 @@ main(int argc, char *argv[]) {
 	initproctitle(argc, argv);
 #endif
 
+	/* Prevent output of errors */
+	opterr = 0;
 	while ((c = getopt_long (argc, argv, "aBfFhik:lL:Mno:O:p:rRsU:vVwt:",
 				 longopts, NULL)) != -1) {
 		switch (c) {
