@@ -23,7 +23,7 @@ srcs_mount = fstab.c mount_mntent.c getusername.c lomount.c devname.c devname.h 
 #    between CFLAGS and CPPFLAGS, we follow this behaviour and use CFLAGS only.
 ldadd_common =
 ldadd_static =
-cflags_common = $(AM_CFLAGS)
+cflags_common = $(AM_CFLAGS) -ljansson
 ldflags_static = -all-static
 
 mount_SOURCES = mount.c $(srcs_mount) ../lib/setproctitle.c

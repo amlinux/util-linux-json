@@ -48,6 +48,8 @@
 #include "setproctitle.h"
 #endif
 
+#include <jansson.h>
+
 /* True for fake mount (-f).  */
 static int fake = 0;
 
@@ -258,15 +260,16 @@ parse_string_opt(char *s) {
 }
 
 /* Report on a single mount.  */
-static void
+static json_t*
 print_one (const struct my_mntent *me) {
 	if (mount_quiet)
-		return;
-	printf ("%s on %s", me->mnt_fsname, me->mnt_dir);
+		return NULL;
+	json_t *json = json_pack("{ssss}", "fsname", me->mnt_fsname,
+			"mnt_dir", me->mnt_dir);
 	if (me->mnt_type != NULL && *(me->mnt_type) != '\0')
-		printf (" type %s", me->mnt_type);
+		json_object_set(json, "type", json_string(me->mnt_type));
 	if (me->mnt_opts != NULL)
-		printf (" (%s)", me->mnt_opts);
+		json_object_set(json, "opts", json_string(me->mnt_opts));
 	if (list_with_volumelabel && is_pseudo_fs(me->mnt_type) == 0) {
 		const char *devname = spec_to_devname(me->mnt_fsname);
 
@@ -277,12 +280,12 @@ print_one (const struct my_mntent *me) {
 			my_free(devname);
 
 			if (label) {
-				printf (" [%s]", label);
+				json_object_set(json, "label", json_string(label));
 				my_free(label);
 			}
 		}
 	}
-	printf ("\n");
+	return json;
 }
 
 /* Report on everything in mtab (of the specified types if any).  */
@@ -291,17 +294,16 @@ print_all (char *types) {
      struct mntentchn *mc, *mc0;
 
      mc0 = mtab_head();
+     json_t *json = json_array();
      for (mc = mc0->nxt; mc && mc != mc0; mc = mc->nxt) {
-	  if (matching_type (mc->m.mnt_type, types))
-	       print_one (&(mc->m));
+	  if (matching_type (mc->m.mnt_type, types)) {
+	       json_t *ent = print_one (&(mc->m));
+	       if (ent)
+	           json_array_append(json, ent);
+	  }
      }
-
-     if (!mtab_does_not_exist() && !mtab_is_a_symlink() && is_readonly(_PATH_MOUNTED))
-          printf(_("\n"
-	"mount: warning: /etc/mtab is not writable (e.g. read-only filesystem).\n"
-	"       It's possible that information reported by mount(8) is not\n"
-	"       up to date. For actual information about system mount points\n"
-	"       check the /proc/mounts file.\n\n"));
+     json_dumpf(json, stdout, JSON_INDENT(2));
+     json_decref(json);
 
      exit (0);
 }

@@ -390,6 +390,13 @@ AC_ARG_VAR([BLKID_LIBS_STATIC], [-l options for linking statically with blkid])
 UTIL_CHECK_LIB(util, openpty)
 UTIL_CHECK_LIB(termcap, tgetnum)
 
+UTIL_CHECK_LIB(jansson, json_pack)
+if test "x$have_jansson" = xyes; then
+  JANSSON_LIBS="-ljansson"
+else
+  AC_MSG_ERROR([jansson not found])
+fi
+
 AM_GNU_GETTEXT_VERSION([0.14.1])
 AM_GNU_GETTEXT([external])
 if test -d "$srcdir/po"
