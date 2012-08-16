@@ -62,9 +62,6 @@ static int nomtab = 0;
 /* True for explicit readonly (-r).  */
 static int readonly = 0;
 
-/* Nonzero for chatty (-v).  */
-int verbose = 0;
-
 /* Do we hash the password or not */
 int hash_pass = 1;
 
@@ -172,10 +169,6 @@ static const struct opt_map opt_map[] = {
   { "sub",	0, 1, MS_NOSUB	},	/* allow submounts */
   { "nosub",	0, 0, MS_NOSUB	},	/* don't allow submounts */
 #endif
-#ifdef MS_SILENT
-  { "quiet",	0, 0, MS_SILENT    },	/* be quiet  */
-  { "loud",	0, 1, MS_SILENT    },	/* print out messages. */
-#endif
 #ifdef MS_MANDLOCK
   { "mand",	0, 0, MS_MANDLOCK },	/* Allow mandatory locks on this FS */
   { "nomand",	0, 1, MS_MANDLOCK },	/* Forbid mandatory locks on this FS */
@@ -262,8 +255,6 @@ parse_string_opt(char *s) {
 /* Report on a single mount.  */
 static json_t*
 print_one (const struct my_mntent *me) {
-	if (mount_quiet)
-		return NULL;
 	json_t *json = json_pack("{ssss}", "fsname", me->mnt_fsname,
 			"mnt_dir", me->mnt_dir);
 	if (me->mnt_type != NULL && *(me->mnt_type) != '\0')
@@ -381,10 +372,6 @@ append_context(const char *optname, char *optdata, char **extra_opts)
 			raw == NULL)
 		return -1;
 
-	if (verbose)
-		printf(_("mount: translated %s '%s' to '%s'\n"),
-				optname, data, (char *) raw);
-
 	*extra_opts = append_opt(*extra_opts, optname, NULL);
 	*extra_opts = xstrconcat4(*extra_opts, "\"", (char *) raw, "\"");
 
@@ -414,12 +401,6 @@ parse_opt(char *opt, int *mask, char **extra_opts) {
 			if ((om->mask == MS_OWNER || om->mask == MS_GROUP)
 			    && !om->inv)
 				*mask |= MS_OWNERSECURE;
-#ifdef MS_SILENT
-			if (om->mask == MS_SILENT && om->inv)  {
-				mount_quiet = 1;
-				verbose = 0;
-			}
-#endif
 			if (streq(opt, "nofail"))
 				opt_nofail = 1;
 			return;
@@ -625,11 +606,6 @@ do_mount_syscall (struct mountargs *args) {
 	if ((flags & MS_MGC_MSK) == 0)
 		flags |= MS_MGC_VAL;
 
-	if (verbose > 2)
-		printf("mount: mount(2) syscall: source: \"%s\", target: \"%s\", "
-			"filesystemtype: \"%s\", mountflags: %d, data: %s\n",
-			args->spec, args->node, args->type, flags, (char *) args->data);
-
 	return mount (args->spec, args->node, args->type, flags, args->data);
 }
 
@@ -675,8 +651,6 @@ check_special_mountprog(const char *spec, const char *node, const char *type, in
   if (strlen(type) < 100) {
        sprintf(mountprog, "/sbin/mount.%s", type);
        if (stat(mountprog, &statbuf) == 0) {
-	    if (verbose)
-		 fflush(stdout);
 	    res = fork();
 	    if (res == 0) {
 		 char *oo, *mountargs[10];
@@ -698,23 +672,11 @@ check_special_mountprog(const char *spec, const char *node, const char *type, in
 		      mountargs[i++] = "-f";				/* 5 */
 		 if (nomtab)
 		      mountargs[i++] = "-n";				/* 6 */
-		 if (verbose)
-		      mountargs[i++] = "-v";				/* 7 */
 		 if (oo && *oo) {
 		      mountargs[i++] = "-o";				/* 8 */
 		      mountargs[i++] = oo;				/* 9 */
 		 }
 		 mountargs[i] = NULL;					/* 10 */
-
-		 if (verbose > 2) {
-			i = 0;
-			while(mountargs[i]) {
-				printf("mount: external mount: argv[%d] = \"%s\"\n",
-					i, mountargs[i]);
-				i++;
-			}
-			fflush(stdout);
-		 }
 
 		 execv(mountprog, mountargs);
 		 exit(1);	/* exec failed */
@@ -861,8 +823,6 @@ procfsloop_mount(int (*mount_fn)(struct mountargs *, int *, int *),
 				continue;
 			set_tested (fsname);
 			args->type = fsname;
-			if (verbose)
-				printf(_("Trying %s\n"), fsname);
 			if ((*mount_fn) (args, special, status) == 0) {
 				*types = fsname;
 				ret = 0;
@@ -889,17 +849,6 @@ guess_fstype_by_devname(const char *devname)
 {
    const char *type = fsprobe_get_fstype_by_devname(devname);
 
-   if (verbose) {
-      printf (_("mount: you didn't specify a filesystem type for %s\n"), devname);
-
-      if (!type)
-         printf (_("       I will try all types mentioned in %s or %s\n"),
-		      _PATH_FILESYSTEMS, _PATH_PROC_FILESYSTEMS);
-      else if (!strcmp(type, MNTTYPE_SWAP))
-         printf (_("       and it looks like this is swapspace\n"));
-      else
-         printf (_("       I will try type %s\n"), type);
-   }
    return type;
 }
 
@@ -1101,8 +1050,6 @@ loop_check(const char **spec, const char **type, int *flags,
   if (*loop) {
     *flags |= MS_LOOP;
     if (fake) {
-      if (verbose)
-	printf(_("mount: skipping the setup of a loop device\n"));
     } else {
       int loop_opts = SETLOOP_AUTOCLEAR; /* always attempt autoclear */
       int res;
@@ -1123,8 +1070,6 @@ loop_check(const char **spec, const char **type, int *flags,
 	  *loopdev = find_unused_loop_device();
 	if (!*loopdev)
 	  return EX_SYSERR;	/* no more loop devices */
-	if (verbose)
-	  printf(_("mount: going to use the loop device %s\n"), *loopdev);
 	if (!keysz && opt_keybits)
 	  keysz  = strtoul(opt_keybits, NULL, 0);
 	if (opt_nohashpass)
@@ -1135,8 +1080,6 @@ loop_check(const char **spec, const char **type, int *flags,
 	     /* loop dev has been grabbed by some other process,
 	        try again, if not given explicitly */
 	     if (!opt_loopdev) {
-	       if (verbose)
-	         printf(_("mount: stolen loop=%s ...trying again\n"), *loopdev);
 	       my_free(*loopdev);
 	       *loopdev = NULL;
 	       continue;
@@ -1145,8 +1088,6 @@ loop_check(const char **spec, const char **type, int *flags,
 	     return EX_FAIL;
 
 	  } else {
-	     if (verbose)
-	       printf(_("mount: failed setting up loop device\n"));
 	     if (!opt_loopdev) {
 	       my_free(*loopdev);
 	       *loopdev = NULL;
@@ -1156,8 +1097,6 @@ loop_check(const char **spec, const char **type, int *flags,
 	}
       } while (!*loopdev);
 
-      if (verbose > 1)
-	printf(_("mount: setup loop device successfully\n"));
       *spec = *loopdev;
 
       if (loop_opts & SETLOOP_RDONLY)
@@ -1186,13 +1125,8 @@ update_mtab_entry(const char *spec, const char *node, const char *type,
 
 	/* We get chatty now rather than after the update to mtab since the
 	   mount succeeded, even if the write to /etc/mtab should fail.  */
-	if (verbose)
-		print_one (&mnt);
 
 	if (!nomtab && mtab_does_not_exist()) {
-		if (verbose > 1)
-			printf(_("mount: no %s found - creating it..\n"),
-			       _PATH_MOUNTED);
 		create_mtab ();
 	}
 
@@ -1312,13 +1246,6 @@ try_mount_one (const char *spec0, const char *node0, const char *types0,
   /* copies for freeing on exit */
   const char *opts1, *spec1, *node1, *types1, *extra_opts1;
 
-  if (verbose > 2) {
-	  printf("mount: spec:  \"%s\"\n", spec0);
-	  printf("mount: node:  \"%s\"\n", node0);
-	  printf("mount: types: \"%s\"\n", types0);
-	  printf("mount: opts:  \"%s\"\n", opts0);
-  }
-
   spec = spec1 = xstrdup(spec0);
   node = node1 = xstrdup(node0);
   types = types1 = xstrdup(types0);
@@ -1399,7 +1326,7 @@ mount_retry:
   }
 
   if (fake || mnt5_res == 0) {
-      /* Mount succeeded, report this (if verbose) and write mtab entry.  */
+      /* Mount succeeded, write mtab entry.  */
 
       if (!(mounttype & MS_PROPAGATION)) {
 	      update_mtab_entry(loop ? loopfile : spec,
@@ -1452,7 +1379,7 @@ mount_retry:
 	/* heuristic: if /proc/version exists, then probably proc is mounted */
 	if (stat ("/proc/version", &statbuf))   /* proc mounted? */
 	   error (_("mount: %s is busy"), node);   /* no */
-	else if (!mount_all || verbose)            /* yes, don't mention it */
+	else if (!mount_all)            /* yes, don't mention it */
 	   error (_("mount: proc already mounted"));
       } else {
 	error (_("mount: %s already mounted or %s busy"), spec, node);
@@ -1620,9 +1547,6 @@ mount_retry:
     }
     case ENOMEDIUM:
       if (retries < CRDOM_NOMEDIUM_RETRIES) {
-	      if (verbose)
-		      printf(_("mount: no medium found on %s ...trying again\n"),
-				 spec);
               sleep(3);
 	      ++retries;
               goto mount_retry;
@@ -1636,26 +1560,6 @@ mount_retry:
   res = EX_FAIL;
 
  out:
-
-#if defined(HAVE_LIBSELINUX) && defined(HAVE_SECURITY_GET_INITIAL_CONTEXT)
-  if (res != EX_FAIL && verbose && is_selinux_enabled() > 0) {
-      security_context_t raw = NULL, def = NULL;
-
-      if (getfilecon(node, &raw) > 0 &&
-		     security_get_initial_context("file", &def) == 0) {
-
-	  if (!selinux_file_context_cmp(raw, def))
-	      printf(_("mount: %s does not contain SELinux labels.\n"
-                   "       You just mounted an file system that supports labels which does not\n"
-                   "       contain labels, onto an SELinux box. It is likely that confined\n"
-                   "       applications will generate AVC messages and not be allowed access to\n"
-                   "       this file system.  For more details see restorecon(8) and mount(8).\n"),
-                   node);
-      }
-      freecon(raw);
-      freecon(def);
-  }
-#endif
 
   my_free(extra_opts1);
   my_free(spec1);
@@ -1723,16 +1627,8 @@ mount_one (const char *spec, const char *node, const char *types,
 	if (types == NULL && !mounttype && !is_existing_file(spec)) {
 		if (strchr (spec, ':') != NULL) {
 			types = "nfs";
-			if (verbose)
-				printf(_("mount: no type was given - "
-					 "I'll assume nfs because of "
-					 "the colon\n"));
 		} else if(!strncmp(spec, "//", 2)) {
 			types = "cifs";
-			if (verbose)
-				printf(_("mount: no type was given - "
-					 "I'll assume cifs because of "
-					 "the // prefix\n"));
 		}
 	}
 
@@ -1824,11 +1720,6 @@ do_mount_all (char *types, char *options, char *test_opts) {
 		    && !streq (mc->m.mnt_dir, "root")) {
 
 			if (mounted (mc->m.mnt_fsname, mc->m.mnt_dir)) {
-				if (verbose)
-					printf(_("mount: %s already mounted "
-						 "on %s\n"),
-					       mc->m.mnt_fsname,
-					       mc->m.mnt_dir);
 				continue;
 			}
 
@@ -1930,7 +1821,6 @@ static struct option longopts[] = {
 	{ "no-mtab", 0, 0, 'n' },
 	{ "read-only", 0, 0, 'r' },
 	{ "ro", 0, 0, 'r' },
-	{ "verbose", 0, 0, 'v' },
 	{ "version", 0, 0, 'V' },
 	{ "read-write", 0, 0, 'w' },
 	{ "rw", 0, 0, 'w' },
@@ -2192,9 +2082,6 @@ main(int argc, char *argv[]) {
 		case 'U':
 			uuid = optarg;
 			break;
-		case 'v':		/* be chatty - more so if repeated */
-			++verbose;
-			break;
 		case 'V':		/* version */
 			print_version(EXIT_SUCCESS);
 			break;
@@ -2257,15 +2144,6 @@ main(int argc, char *argv[]) {
 		}
 	}
 
-	if (verbose > 2) {
-		printf("mount: fstab path: \"%s\"\n", _PATH_MNTTAB);
-		printf("mount: mtab path:  \"%s\"\n", _PATH_MOUNTED);
-		printf("mount: lock path:  \"%s\"\n", _PATH_MOUNTED_LOCK);
-		printf("mount: temp path:  \"%s\"\n", _PATH_MOUNTED_TMP);
-		printf("mount: UID:        %d\n", getuid());
-		printf("mount: eUID:       %d\n", geteuid());
-	}
-
 	argc -= optind;
 	argv += optind;
 
@@ -2309,8 +2187,6 @@ main(int argc, char *argv[]) {
 	case 0:
 		/* mount -a */
 		result = do_mount_all (types, options, test_opts);
-		if (result == 0 && verbose && !fake)
-			error(_("nothing was mounted"));
 		break;
 
 	case 1:
