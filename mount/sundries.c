@@ -19,6 +19,9 @@
 #include "xmalloc.h"
 #include "nls.h"
 
+#include <jansson.h>
+#include <errno.h>
+
 int mount_quiet;
 int verbose;
 int nocanonicalize;
@@ -102,27 +105,44 @@ block_signals (int how) {
 /* Non-fatal error.  Print message and return.  */
 /* (print the message in a single printf, in an attempt
     to avoid mixing output of several threads) */
+
 void
 error (const char *fmt, ...) {
-     va_list args;
+	va_list args;
+	char buffer[1024];
 
-     if (mount_quiet)
-	  return;
-     va_start (args, fmt);
-     vfprintf (stderr, fmt, args);
-     va_end (args);
-     fputc('\n', stderr);
+	va_start(args, fmt);
+	vsnprintf(buffer, 1024, fmt, args);
+	buffer[1023] = 0;
+	va_end(args);
+
+	json_t *json = json_pack("{ss}", "msg", buffer);
+	if (errno) {
+		json_object_set(json, "errno", json_integer(errno));
+		json_object_set(json, "errno_str", json_string(strerror(errno)));
+	}
+	json_dumpf(json, stdout, JSON_INDENT(2));
+	json_decref(json);
 }
 
 /* Fatal error.  Print message and exit.  */
 void
 die(int err, const char *fmt, ...) {
 	va_list args;
+	char buffer[1024];
 
 	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	fprintf(stderr, "\n");
+	vsnprintf(buffer, 1024, fmt, args);
+	buffer[1023] = 0;
 	va_end(args);
+
+	json_t *json = json_pack("{siss}", "err", err, "msg", buffer);
+	if (errno) {
+		json_object_set(json, "errno", json_integer(errno));
+		json_object_set(json, "errno_str", json_string(strerror(errno)));
+	}
+	json_dumpf(json, stdout, JSON_INDENT(2));
+	json_decref(json);
 
 	exit(err);
 }

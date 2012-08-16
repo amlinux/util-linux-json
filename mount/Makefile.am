@@ -21,9 +21,9 @@ srcs_mount = fstab.c mount_mntent.c getusername.c lomount.c devname.c devname.h 
 # generic flags for all programs (except losetup)
 # -- note that pkg-config autoconf macros (pkg.m4) does not differentiate
 #    between CFLAGS and CPPFLAGS, we follow this behaviour and use CFLAGS only.
-ldadd_common =
-ldadd_static =
-cflags_common = $(AM_CFLAGS) -ljansson
+ldadd_common = -ljansson
+ldadd_static = -ljansson
+cflags_common = $(AM_CFLAGS)
 ldflags_static = -all-static
 
 mount_SOURCES = mount.c $(srcs_mount) ../lib/setproctitle.c
@@ -43,6 +43,7 @@ swapon_LDADD = $(ldadd_common)
 
 losetup_SOURCES = lomount.c $(srcs_common) loop.h lomount.h
 losetup_CPPFLAGS = -DMAIN $(AM_CPPFLAGS)
+losetup_LDADD = -ljansson
 
 mount_static_LDADD =
 
@@ -86,7 +87,8 @@ endif
 
 noinst_PROGRAMS = mtab_lock_test
 mtab_lock_test_SOURCES = fstab.c $(srcs_common) $(hdrs_mount)
-mtab_lock_test_CPPFLAGS = -DMAIN_TEST_MTABLOCK $(AM_CPPFLAGS)
+mtab_lock_test_CFLAGS = $(cflags_common) -DMAIN_TEST_MTABLOCK
+mtab_lock_test_LDADD = -ljansson
 
 install-exec-hook:
 	cd $(DESTDIR)$(sbindir) && ln -sf swapon swapoff

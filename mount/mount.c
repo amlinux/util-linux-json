@@ -1321,7 +1321,6 @@ mount_retry:
   if (!fake && mnt5_res == 0 &&
       (flags & MS_BIND) && (flags & MS_RDONLY) && !is_readonly(node)) {
 
-      printf(_("mount: warning: %s seems to be mounted read-write.\n"), node);
       flags &= ~MS_RDONLY;
   }
 
@@ -1850,41 +1849,9 @@ static struct option longopts[] = {
    The user should not need a pager to read it. */
 static void
 usage (FILE *fp, int n) {
-	fprintf(fp, _(
-	  "Usage: mount -V                 : print version\n"
-	  "       mount -h                 : print this help\n"
-	  "       mount                    : list mounted filesystems\n"
-	  "       mount -l                 : idem, including volume labels\n"
-	  "So far the informational part. Next the mounting.\n"
-	  "The command is `mount [-t fstype] something somewhere'.\n"
-	  "Details found in /etc/fstab may be omitted.\n"
-	  "       mount -a [-t|-O] ...     : mount all stuff from /etc/fstab\n"
-	  "       mount device             : mount device at the known place\n"
-	  "       mount directory          : mount known device here\n"
-	  "       mount -t type dev dir    : ordinary mount command\n"
-	  "Note that one does not really mount a device, one mounts\n"
-	  "a filesystem (of the given type) found on the device.\n"
-	  "One can also mount an already visible directory tree elsewhere:\n"
-	  "       mount --bind olddir newdir\n"
-	  "or move a subtree:\n"
-	  "       mount --move olddir newdir\n"
-	  "One can change the type of mount containing the directory dir:\n"
-	  "       mount --make-shared dir\n"
-	  "       mount --make-slave dir\n"
-	  "       mount --make-private dir\n"
-	  "       mount --make-unbindable dir\n"
-	  "One can change the type of all the mounts in a mount subtree\n"
-	  "containing the directory dir:\n"
-	  "       mount --make-rshared dir\n"
-	  "       mount --make-rslave dir\n"
-	  "       mount --make-rprivate dir\n"
-	  "       mount --make-runbindable dir\n"
-	  "A device can be given by name, say /dev/hda1 or /dev/cdrom,\n"
-	  "or by label, using  -L label  or by uuid, using  -U uuid .\n"
-	  "Other options: [-nfFrsvw] [-o options] [-p passwdfd].\n"
-	  "For many more details, say  man 8 mount .\n"
-	));
-
+	json_t *json = json_pack("{ssss}", "err", "API-MISFORMED", "msg", "Invalid usage arguments");
+	json_dumpf(json, fp, JSON_INDENT(2));
+	json_decref(json);
 	unlock_mtab();
 	exit (n);
 }
@@ -1971,16 +1938,18 @@ getfs(const char *spec, const char *uuid, const char *label)
 
 static void
 print_version(int rc) {
-	printf(	"mount from %s (with "
+	json_t *options = json_array();
+	json_t *json = json_pack("{ssso}", "version", PACKAGE_STRING, "options", options);
 #ifdef HAVE_LIBBLKID
-		"libblkid"
+	json_array_append(options, json_string("libblkid"));
 #else
-		"libvolume_id"
+	json_array_append(options, json_string("libvolume_id"));
 #endif
 #ifdef HAVE_LIBSELINUX
-		" and selinux"
+	json_array_append(options, json_string("selinux"));
 #endif
-		" support)\n", PACKAGE_STRING);
+	json_dumpf(json, stdout, JSON_INDENT(2));
+	json_decref(json);
 	exit(rc);
 }
 
@@ -2100,7 +2069,9 @@ main(int argc, char *argv[]) {
 		    {
 			const char *fstype;
 			fstype = fsprobe_get_fstype_by_devname(optarg);
-			printf("%s\n", fstype ? fstype : "unknown");
+			json_t *json = json_pack("{ss}", "fstype", fstype ? fstype : "unknown");
+			json_dumpf(json, stdout, JSON_INDENT(2));
+			json_decref(json);
 			exit(fstype ? 0 : EX_FAIL);
 		    }
 
